@@ -1,103 +1,234 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { Canvas, useThree, useFrame } from "@react-three/fiber";
+import { Physics, useSphere, usePlane, useBox } from "@react-three/cannon";
+import { PointerLockControls } from "@react-three/drei";
+import { useEffect, useState, useRef } from "react";
+import * as THREE from "three";
+
+// Player Component with WASD Controls
+function Player() {
+  const [ref, api] = useSphere(() => ({
+    mass: 1,
+    position: [0, 1, 0],
+    type: "Dynamic",
+    args: [0.3],
+  }));
+
+  // Track position for debugging
+  const position = useRef([0, 0, 0]);
+  useEffect(() => {
+    api.position.subscribe((p) => (position.current = p));
+  }, [api.position]);
+
+  const [keys, setKeys] = useState({
+    w: false,
+    s: false,
+    a: false,
+    d: false,
+    space: false,
+  });
+
+  const velocity = useRef([0, 0, 0]);
+  useEffect(() => {
+    api.velocity.subscribe((v) => (velocity.current = v));
+  }, [api.velocity]);
+
+  const { camera } = useThree();
+  const direction = new THREE.Vector3();
+  const frontVector = new THREE.Vector3();
+  const sideVector = new THREE.Vector3();
+
+  // Key press handlers
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      const key = event.key.toLowerCase();
+      if (key === " ") {
+        setKeys((prev) => ({ ...prev, space: true }));
+      } else {
+        setKeys((prev) => ({ ...prev, [key]: true }));
+      }
+    };
+
+    const handleKeyUp = (event) => {
+      const key = event.key.toLowerCase();
+      if (key === " ") {
+        setKeys((prev) => ({ ...prev, space: false }));
+      } else {
+        setKeys((prev) => ({ ...prev, [key]: false }));
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, []);
+
+  // Update movement on each frame
+  useFrame(() => {
+    // Set movement direction based on camera's orientation
+    frontVector.set(0, 0, Number(keys.s) - Number(keys.w));
+    sideVector.set(Number(keys.a) - Number(keys.d), 0, 0);
+    direction
+      .subVectors(frontVector, sideVector)
+      .normalize()
+      .multiplyScalar(5) // Movement speed
+      .applyEuler(camera.rotation);
+
+    // Apply movement velocity - preserve y velocity for gravity
+    api.velocity.set(direction.x, velocity.current[1], direction.z);
+
+    // Jump when space is pressed and player is near ground
+    if (keys.space && Math.abs(velocity.current[1]) < 0.1) {
+      api.velocity.set(velocity.current[0], 5, velocity.current[2]);
+    }
+
+    // Update camera position to follow player
+    camera.position.copy(new THREE.Vector3(...position.current));
+  });
+
+  return <mesh ref={ref} />;
+}
+
+// Ground Plane with Physics
+function Ground() {
+  const [ref] = usePlane(() => ({
+    rotation: [-Math.PI / 2, 0, 0],
+    position: [0, -0.5, 0],
+    type: "Static",
+  }));
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <mesh ref={ref}>
+      <planeGeometry args={[50, 50]} />
+      <meshStandardMaterial color="#567d46" />
+    </mesh>
+  );
+}
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+// Box objects for the environment
+function Box({ position, size, color }) {
+  const [ref] = useBox(() => ({
+    mass: 0.6,
+    position,
+    args: size,
+  }));
+
+  return (
+    <mesh ref={ref}>
+      <boxGeometry args={size} />
+      <meshStandardMaterial color={color} />
+    </mesh>
+  );
+}
+
+// Obstacle Platform (static)
+function Platform({ position, size, color }) {
+  const [ref] = useBox(() => ({
+    type: "Static",
+    position,
+    args: size,
+  }));
+
+  return (
+    <mesh ref={ref}>
+      <boxGeometry args={size} />
+      <meshStandardMaterial color={color} />
+    </mesh>
+  );
+}
+
+
+
+// Random Environment Generator
+function Environment() {
+  // Create platforms
+  const platforms = [
+    { position: [5, 0, -5], size: [4, 0.5, 4], color: "#8a5a44" },
+    { position: [-5, 1, -8], size: [4, 0.5, 4], color: "#8a5a44" },
+    { position: [0, 2, -15], size: [8, 0.5, 4], color: "#8a5a44" },
+    { position: [10, 3, -10], size: [4, 0.5, 4], color: "#8a5a44" },
+    { position: [-10, 4, -5], size: [4, 0.5, 4], color: "#8a5a44" },
+  ];
+
+  // Create dynamic boxes
+  const boxes = [
+    { position: [2, 2, -3], size: [1, 1, 1], color: "#4d4dff" },
+    { position: [-2, 2, -3], size: [1, 1, 1], color: "#ff4d4d" },
+    { position: [0, 2, -6], size: [1, 1, 1], color: "#4dff4d" },
+    { position: [4, 5, -4], size: [0.8, 0.8, 0.8], color: "#ffff4d" },
+    { position: [-4, 5, -4], size: [0.8, 0.8, 0.8], color: "#ff4dff" },
+  ];
+
+  // Create walls
+  const walls = [
+    { position: [15, 5, 0], size: [1, 10, 30], color: "#555555" },
+    { position: [-15, 5, 0], size: [1, 10, 30], color: "#555555" },
+    { position: [0, 5, -25], size: [30, 10, 1], color: "#555555" },
+    { position: [0, 5, 15], size: [30, 10, 1], color: "#555555" },
+  ];
+
+  return (
+    <>
+      {/* Platforms */}
+      {platforms.map((platform, i) => (
+        <Platform
+          key={`platform-${i}`}
+          position={platform.position}
+          size={platform.size}
+          color={platform.color}
+        />
+      ))}
+
+      {/* Dynamic Boxes */}
+      {boxes.map((box, i) => (
+        <Box
+          key={`box-${i}`}
+          position={box.position}
+          size={box.size}
+          color={box.color}
+        />
+      ))}
+
+      {/* Walls */}
+      {walls.map((wall, i) => (
+        <Platform
+          key={`wall-${i}`}
+          position={wall.position}
+          size={wall.size}
+          color={wall.color}
+        />
+      ))}
+
+    </>
+  );
+}
+
+// Scene Component
+export default function Scene() {
+  return (
+    <main className="h-screen bg-black">
+      <Canvas camera={{ position: [0, 1, 0], fov: 70 }}>
+        {/* Lighting */}
+        <ambientLight intensity={0.8} />
+        <directionalLight position={[10, 10, 5]} intensity={1} castShadow />
+        <directionalLight position={[-10, 10, -5]} intensity={0.5} />
+        <color attach="background" args={["#87ceeb"]} />
+
+        {/* Enable Physics */}
+        <Physics gravity={[0, -9.8, 0]}>
+          <Ground />
+          <Environment />
+          <Player />
+        </Physics>
+
+        {/* FPS Controls */}
+        <PointerLockControls />
+      </Canvas>
+    </main>
   );
 }
